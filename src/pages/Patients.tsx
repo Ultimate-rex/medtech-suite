@@ -59,12 +59,18 @@ export default function Patients() {
       return;
     }
 
+    // Format phone with +91 prefix
+    let formattedPhone = newPatient.phone;
+    if (!formattedPhone.startsWith('+91')) {
+      formattedPhone = `+91-${formattedPhone.replace(/^\+?/, '')}`;
+    }
+
     const patient: Patient = {
       id: (patients.length + 1).toString(),
       name: newPatient.name,
       age: parseInt(newPatient.age) || 0,
       gender: newPatient.gender,
-      phone: newPatient.phone,
+      phone: formattedPhone,
       email: newPatient.email,
       address: newPatient.address,
       bloodGroup: newPatient.bloodGroup,
@@ -125,7 +131,7 @@ export default function Patients() {
                     onChange={(e) =>
                       setNewPatient({ ...newPatient, name: e.target.value })
                     }
-                    placeholder="John Smith"
+                    placeholder="Rahul Sharma"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -161,14 +167,14 @@ export default function Patients() {
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="phone">Phone *</Label>
+                  <Label htmlFor="phone">Phone * (+91)</Label>
                   <Input
                     id="phone"
                     value={newPatient.phone}
                     onChange={(e) =>
                       setNewPatient({ ...newPatient, phone: e.target.value })
                     }
-                    placeholder="+1-234-567-8901"
+                    placeholder="9876543210"
                   />
                 </div>
                 <div className="grid gap-2">
@@ -180,7 +186,7 @@ export default function Patients() {
                     onChange={(e) =>
                       setNewPatient({ ...newPatient, email: e.target.value })
                     }
-                    placeholder="john@email.com"
+                    placeholder="rahul@email.com"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -215,7 +221,7 @@ export default function Patients() {
                     onChange={(e) =>
                       setNewPatient({ ...newPatient, address: e.target.value })
                     }
-                    placeholder="123 Main St"
+                    placeholder="123 MG Road, Mumbai"
                   />
                 </div>
                 <Button onClick={handleAddPatient} className="mt-2">

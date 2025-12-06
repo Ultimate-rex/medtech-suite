@@ -29,8 +29,9 @@ import {
 } from '@/components/ui/select';
 import { mockBills, mockPatients } from '@/data/mockData';
 import { Bill, BillItem } from '@/types/hospital';
-import { Plus, Search, DollarSign, FileText, Printer } from 'lucide-react';
+import { Plus, Search, IndianRupee, FileText, Printer } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/currency';
 
 export default function Billing() {
   const [bills, setBills] = useState<Bill[]>(mockBills);
@@ -122,22 +123,22 @@ export default function Billing() {
           <Card className="animate-fade-in">
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-success/20">
-                <DollarSign className="h-6 w-6 text-success" />
+                <IndianRupee className="h-6 w-6 text-success" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Collected</p>
-                <p className="text-2xl font-bold">${totalCollected.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{formatCurrency(totalCollected)}</p>
               </div>
             </CardContent>
           </Card>
           <Card className="animate-fade-in">
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-warning/20">
-                <DollarSign className="h-6 w-6 text-warning" />
+                <IndianRupee className="h-6 w-6 text-warning" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Pending Amount</p>
-                <p className="text-2xl font-bold">${totalPending.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{formatCurrency(totalPending)}</p>
               </div>
             </CardContent>
           </Card>
@@ -214,7 +215,7 @@ export default function Billing() {
                       />
                       <Input
                         type="number"
-                        placeholder="Price"
+                        placeholder="Price (₹)"
                         value={item.unitPrice}
                         onChange={(e) => updateBillItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
                       />
@@ -229,7 +230,7 @@ export default function Billing() {
                 <div className="flex justify-between border-t pt-4">
                   <span className="font-medium">Total:</span>
                   <span className="font-bold">
-                    ${newBill.items.reduce((sum, i) => sum + i.amount, 0).toFixed(2)}
+                    {formatCurrency(newBill.items.reduce((sum, i) => sum + i.amount, 0))}
                   </span>
                 </div>
 
@@ -267,8 +268,8 @@ export default function Billing() {
                     <TableCell>{bill.patientName}</TableCell>
                     <TableCell>{bill.date}</TableCell>
                     <TableCell>{bill.dueDate}</TableCell>
-                    <TableCell className="text-right">${bill.totalAmount}</TableCell>
-                    <TableCell className="text-right">${bill.paidAmount}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(bill.totalAmount)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(bill.paidAmount)}</TableCell>
                     <TableCell>
                       <Badge variant={getStatusVariant(bill.status)}>{bill.status}</Badge>
                     </TableCell>
