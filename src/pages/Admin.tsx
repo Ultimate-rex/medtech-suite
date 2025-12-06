@@ -29,8 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { mockDoctors } from '@/data/mockData';
-import { Doctor } from '@/types/hospital';
+import { mockDoctors, mockPatients, mockMedicines } from '@/data/mockData';
+import { Doctor, Patient, Medicine } from '@/types/hospital';
 import {
   Plus,
   Users,
@@ -40,8 +40,12 @@ import {
   Building,
   Edit,
   Trash2,
+  Stethoscope,
+  Pill,
+  UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/currency';
 
 const specializations = [
   'Cardiology',
@@ -54,8 +58,10 @@ const specializations = [
 ];
 
 export default function Admin() {
+  // Doctors state
   const [doctors, setDoctors] = useState<Doctor[]>(mockDoctors);
   const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
   const [newDoctor, setNewDoctor] = useState({
     name: '',
     specialization: '',
@@ -63,17 +69,34 @@ export default function Admin() {
     email: '',
   });
 
+  // Patients state
+  const [patients, setPatients] = useState<Patient[]>(mockPatients);
+  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+
+  // Medicines state
+  const [medicines, setMedicines] = useState<Medicine[]>(mockMedicines);
+  const [isAddMedicineOpen, setIsAddMedicineOpen] = useState(false);
+  const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
+
+  // Doctor handlers
   const handleAddDoctor = () => {
     if (!newDoctor.name || !newDoctor.specialization) {
       toast.error('Please fill in required fields');
       return;
     }
 
+    // Format phone with +91
+    let formattedPhone = newDoctor.phone;
+    if (formattedPhone && !formattedPhone.startsWith('+91')) {
+      formattedPhone = `+91-${formattedPhone.replace(/^\+?/, '')}`;
+    }
+
     const doctor: Doctor = {
       id: (doctors.length + 1).toString(),
       name: newDoctor.name,
       specialization: newDoctor.specialization,
-      phone: newDoctor.phone,
+      phone: formattedPhone,
       email: newDoctor.email,
       availability: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
       status: 'Available',
@@ -100,17 +123,58 @@ export default function Admin() {
     );
   };
 
+  // Patient handlers
+  const handleDeletePatient = (id: string) => {
+    setPatients(patients.filter((p) => p.id !== id));
+    toast.success('Patient removed');
+  };
+
+  const togglePatientStatus = (id: string) => {
+    setPatients(
+      patients.map((p) =>
+        p.id === id
+          ? { ...p, status: p.status === 'Active' ? 'Inactive' : 'Active' }
+          : p
+      )
+    );
+  };
+
+  // Medicine handlers
+  const handleDeleteMedicine = (id: string) => {
+    setMedicines(medicines.filter((m) => m.id !== id));
+    toast.success('Medicine removed');
+  };
+
+  const updateMedicineStock = (id: string, quantity: number) => {
+    setMedicines(
+      medicines.map((m) => {
+        if (m.id === id) {
+          let status: Medicine['status'] = 'In-Stock';
+          if (quantity === 0) status = 'Out-of-Stock';
+          else if (quantity < 100) status = 'Low-Stock';
+          return { ...m, quantity, status };
+        }
+        return m;
+      })
+    );
+    toast.success('Stock updated');
+  };
+
   return (
     <MainLayout title="Admin Panel">
       <Tabs defaultValue="doctors" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-4">
+        <TabsList className="grid w-full max-w-2xl grid-cols-5">
           <TabsTrigger value="doctors" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
+            <Stethoscope className="h-4 w-4" />
             <span className="hidden sm:inline">Doctors</span>
           </TabsTrigger>
-          <TabsTrigger value="staff" className="flex items-center gap-2">
-            <UserCog className="h-4 w-4" />
-            <span className="hidden sm:inline">Staff</span>
+          <TabsTrigger value="patients" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Patients</span>
+          </TabsTrigger>
+          <TabsTrigger value="pharmacy" className="flex items-center gap-2">
+            <Pill className="h-4 w-4" />
+            <span className="hidden sm:inline">Pharmacy</span>
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -150,7 +214,7 @@ export default function Admin() {
                       onChange={(e) =>
                         setNewDoctor({ ...newDoctor, name: e.target.value })
                       }
-                      placeholder="Dr. John Smith"
+                      placeholder="Dr. Arun Joshi"
                     />
                   </div>
                   <div className="grid gap-2">
@@ -174,13 +238,13 @@ export default function Admin() {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Phone</Label>
+                    <Label>Phone (+91)</Label>
                     <Input
                       value={newDoctor.phone}
                       onChange={(e) =>
                         setNewDoctor({ ...newDoctor, phone: e.target.value })
                       }
-                      placeholder="+1-234-567-8001"
+                      placeholder="9800000001"
                     />
                   </div>
                   <div className="grid gap-2">
@@ -191,7 +255,7 @@ export default function Admin() {
                       onChange={(e) =>
                         setNewDoctor({ ...newDoctor, email: e.target.value })
                       }
-                      placeholder="dr.smith@hospital.com"
+                      placeholder="dr.arun@hospital.com"
                     />
                   </div>
                   <Button onClick={handleAddDoctor} className="mt-2">
@@ -259,27 +323,149 @@ export default function Admin() {
           </Card>
         </TabsContent>
 
-        {/* Staff Tab */}
-        <TabsContent value="staff" className="space-y-6">
+        {/* Patients Tab */}
+        <TabsContent value="patients" className="space-y-6">
+          <div className="flex justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Manage Patients</h2>
+              <p className="text-sm text-muted-foreground">
+                View and manage all patient records
+              </p>
+            </div>
+          </div>
+
           <Card className="animate-fade-in">
-            <CardHeader>
-              <CardTitle>Staff Management</CardTitle>
-              <CardDescription>
-                Manage hospital staff members and their roles
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <UserCog className="h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">Staff Module</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Manage nurses, technicians, and administrative staff
-                </p>
-                <Button className="mt-4">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Staff Member
-                </Button>
-              </div>
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Age</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Blood Group</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {patients.map((patient) => (
+                    <TableRow key={patient.id}>
+                      <TableCell className="font-medium">{patient.name}</TableCell>
+                      <TableCell>{patient.age}</TableCell>
+                      <TableCell>{patient.phone}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{patient.bloodGroup}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={patient.status === 'Active'}
+                            onCheckedChange={() => togglePatientStatus(patient.id)}
+                          />
+                          <Badge
+                            variant={patient.status === 'Active' ? 'default' : 'secondary'}
+                          >
+                            {patient.status}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="icon">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeletePatient(patient.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Pharmacy Tab */}
+        <TabsContent value="pharmacy" className="space-y-6">
+          <div className="flex justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Manage Pharmacy</h2>
+              <p className="text-sm text-muted-foreground">
+                View and manage medicine inventory
+              </p>
+            </div>
+          </div>
+
+          <Card className="animate-fade-in">
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Quantity</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {medicines.map((medicine) => (
+                    <TableRow key={medicine.id}>
+                      <TableCell className="font-medium">{medicine.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{medicine.category}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          value={medicine.quantity}
+                          onChange={(e) =>
+                            updateMedicineStock(medicine.id, parseInt(e.target.value) || 0)
+                          }
+                          className="w-20 text-right"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(medicine.unitPrice)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            medicine.status === 'In-Stock'
+                              ? 'default'
+                              : medicine.status === 'Low-Stock'
+                              ? 'secondary'
+                              : 'destructive'
+                          }
+                        >
+                          {medicine.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="icon">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteMedicine(medicine.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -301,11 +487,11 @@ export default function Admin() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Address</Label>
-                  <Input defaultValue="123 Medical Center Drive" />
+                  <Input defaultValue="123 MG Road, Mumbai" />
                 </div>
                 <div className="grid gap-2">
-                  <Label>Phone</Label>
-                  <Input defaultValue="+1-800-HOSPITAL" />
+                  <Label>Phone (+91)</Label>
+                  <Input defaultValue="+91-1800-123-4567" />
                 </div>
                 <div className="grid gap-2">
                   <Label>Email</Label>

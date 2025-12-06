@@ -31,6 +31,7 @@ import { mockMedicines } from '@/data/mockData';
 import { Medicine } from '@/types/hospital';
 import { Plus, Search, Package, AlertTriangle, Pill, Edit } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/currency';
 
 const categories = [
   'Analgesic',
@@ -221,7 +222,7 @@ export default function Pharmacy() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label>Unit Price ($)</Label>
+                    <Label>Unit Price (₹)</Label>
                     <Input
                       type="number"
                       step="0.01"
@@ -229,7 +230,7 @@ export default function Pharmacy() {
                       onChange={(e) =>
                         setNewMedicine({ ...newMedicine, unitPrice: e.target.value })
                       }
-                      placeholder="0.50"
+                      placeholder="10.00"
                     />
                   </div>
                   <div className="grid gap-2">
@@ -250,7 +251,7 @@ export default function Pharmacy() {
                     onChange={(e) =>
                       setNewMedicine({ ...newMedicine, manufacturer: e.target.value })
                     }
-                    placeholder="PharmaCo"
+                    placeholder="Cipla, Sun Pharma, etc."
                   />
                 </div>
                 <Button onClick={handleAddMedicine} className="mt-2">
@@ -288,7 +289,7 @@ export default function Pharmacy() {
                       <Badge variant="outline">{medicine.category}</Badge>
                     </TableCell>
                     <TableCell className="text-right">{medicine.quantity}</TableCell>
-                    <TableCell className="text-right">${medicine.unitPrice.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(medicine.unitPrice)}</TableCell>
                     <TableCell>{medicine.expiryDate}</TableCell>
                     <TableCell>{medicine.manufacturer}</TableCell>
                     <TableCell>
