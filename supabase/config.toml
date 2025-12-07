@@ -1,1 +1,10 @@
 project_id = "ixyfyxkidyrsdjhjftsy"
+
+[functions.mongodb]
+verify_jwt = false
+
+[functions.auth]
+verify_jwt = false
+
+[functions.hospital-settings]
+verify_jwt = false

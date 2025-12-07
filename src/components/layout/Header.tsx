@@ -1,4 +1,4 @@
-import { Bell, Search, User } from 'lucide-react';
+import { Bell, Search, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -9,15 +9,41 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/contexts/AuthContext';
+import { useHospitalSettings } from '@/hooks/useHospitalSettings';
+import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
   title: string;
 }
 
 export function Header({ title }: HeaderProps) {
+  const { username, logout } = useAuth();
+  const { settings } = useHospitalSettings();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-card px-6">
-      <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+      <div className="flex items-center gap-3">
+        {settings?.logo_url && (
+          <img 
+            src={settings.logo_url} 
+            alt="Hospital Logo" 
+            className="h-10 w-10 object-contain rounded"
+          />
+        )}
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+          {settings?.hospital_name && (
+            <p className="text-xs text-muted-foreground">{settings.hospital_name}</p>
+          )}
+        </div>
+      </div>
 
       <div className="flex items-center gap-4">
         {/* Search */}
@@ -45,7 +71,7 @@ export function Header({ title }: HeaderProps) {
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <User className="h-4 w-4" />
               </div>
-              <span className="hidden font-medium md:inline-block">Admin</span>
+              <span className="hidden font-medium md:inline-block capitalize">{username || 'Admin'}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
@@ -54,7 +80,8 @@ export function Header({ title }: HeaderProps) {
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
