@@ -31,7 +31,7 @@ serve(async (req) => {
           .from('hospital_settings')
           .select('*')
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('Error fetching settings:', error);
@@ -40,6 +40,33 @@ serve(async (req) => {
             error: error.message 
           }), {
             status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // If no settings exist, create default settings
+        if (!data) {
+          const { data: newData, error: insertError } = await supabase
+            .from('hospital_settings')
+            .insert({ hospital_name: 'Hospital Management System' })
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error('Error creating default settings:', insertError);
+            return new Response(JSON.stringify({ 
+              success: false, 
+              error: insertError.message 
+            }), {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          return new Response(JSON.stringify({ 
+            success: true, 
+            data: newData 
+          }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
