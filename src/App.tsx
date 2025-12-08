@@ -5,8 +5,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import Index from "./pages/Index";
+import LandingPage from "./pages/LandingPage";
+import PatientAuth from "./pages/PatientAuth";
+import PatientDashboard from "./pages/PatientDashboard";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
 import Appointments from "./pages/Appointments";
 import Consultations from "./pages/Consultations";
@@ -26,8 +29,16 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/patient-auth" element={<PatientAuth />} />
+            <Route path="/patient-dashboard" element={<PatientDashboard />} />
+            
+            {/* Staff/Admin login */}
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+            
+            {/* Protected staff routes */}
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/patients" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
             <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
             <Route path="/consultations" element={<ProtectedRoute><Consultations /></ProtectedRoute>} />
@@ -35,6 +46,7 @@ const App = () => (
             <Route path="/labs" element={<ProtectedRoute><Labs /></ProtectedRoute>} />
             <Route path="/pharmacy" element={<ProtectedRoute><Pharmacy /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
