@@ -16,11 +16,16 @@ import {
   Award,
   Shield,
   ArrowRight,
-  Play,
-  ChevronRight
+  ChevronRight,
+  MessageCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useHospitalSettings } from '@/hooks/useHospitalSettings';
+
+// Contact Information
+const HOSPITAL_PHONE = '+91-8002857501';
+const HOSPITAL_EMAIL = 'opffgaming333@gmail.com';
+const WHATSAPP_NUMBER = '918002857501';
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -38,6 +43,15 @@ const LandingPage = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleWhatsAppContact = () => {
+    const message = encodeURIComponent('Hello! I would like to book an appointment at your hospital.');
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
+  };
+
+  const handleEmergencyCall = () => {
+    window.location.href = `tel:${HOSPITAL_PHONE}`;
+  };
 
   const services = [
     { icon: Heart, title: 'Cardiology', description: 'Complete heart care with advanced diagnostics' },
@@ -120,9 +134,13 @@ const LandingPage = () => {
                   <Calendar className="mr-2 h-5 w-5" />
                   Book Appointment
                 </Button>
-                <Button size="lg" variant="outline">
+                <Button size="lg" variant="outline" onClick={handleEmergencyCall}>
                   <Phone className="mr-2 h-5 w-5" />
                   Call Emergency
+                </Button>
+                <Button size="lg" variant="secondary" onClick={handleWhatsAppContact}>
+                  <MessageCircle className="mr-2 h-5 w-5" />
+                  WhatsApp Us
                 </Button>
               </div>
             </div>
@@ -260,23 +278,32 @@ const LandingPage = () => {
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            <Card className="text-center p-6">
+            <Card 
+              className="text-center p-6 cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={handleEmergencyCall}
+            >
               <Phone className="h-10 w-10 mx-auto text-primary mb-4" />
               <h3 className="font-semibold mb-2">Emergency</h3>
-              <p className="text-muted-foreground">+91-1800-HOSPITAL</p>
+              <p className="text-muted-foreground">{HOSPITAL_PHONE}</p>
               <p className="text-sm text-muted-foreground mt-1">24/7 Available</p>
             </Card>
-            <Card className="text-center p-6">
+            <Card 
+              className="text-center p-6 cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={() => window.location.href = `mailto:${HOSPITAL_EMAIL}`}
+            >
               <Mail className="h-10 w-10 mx-auto text-primary mb-4" />
               <h3 className="font-semibold mb-2">Email</h3>
-              <p className="text-muted-foreground">info@hospital.com</p>
+              <p className="text-muted-foreground">{HOSPITAL_EMAIL}</p>
               <p className="text-sm text-muted-foreground mt-1">Quick response within 24hrs</p>
             </Card>
-            <Card className="text-center p-6">
-              <MapPin className="h-10 w-10 mx-auto text-primary mb-4" />
-              <h3 className="font-semibold mb-2">Address</h3>
-              <p className="text-muted-foreground">123 Healthcare Avenue</p>
-              <p className="text-sm text-muted-foreground mt-1">Mumbai, India</p>
+            <Card 
+              className="text-center p-6 cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={handleWhatsAppContact}
+            >
+              <MessageCircle className="h-10 w-10 mx-auto text-primary mb-4" />
+              <h3 className="font-semibold mb-2">WhatsApp</h3>
+              <p className="text-muted-foreground">Chat with us</p>
+              <p className="text-sm text-muted-foreground mt-1">Click to start chat</p>
             </Card>
           </div>
         </div>
@@ -289,14 +316,25 @@ const LandingPage = () => {
           <p className="text-primary-foreground/80 mb-8 max-w-xl mx-auto">
             Join thousands of satisfied patients who trust us with their healthcare needs.
           </p>
-          <Button 
-            size="lg" 
-            variant="secondary"
-            onClick={() => navigate(isLoggedIn ? '/patient-dashboard' : '/patient-auth')}
-          >
-            <Calendar className="mr-2 h-5 w-5" />
-            Book Appointment Now
-          </Button>
+          <div className="flex flex-wrap justify-center gap-4">
+            <Button 
+              size="lg" 
+              variant="secondary"
+              onClick={() => navigate(isLoggedIn ? '/patient-dashboard' : '/patient-auth')}
+            >
+              <Calendar className="mr-2 h-5 w-5" />
+              Book Appointment Now
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline"
+              className="bg-transparent border-primary-foreground text-primary-foreground hover:bg-primary-foreground/10"
+              onClick={handleWhatsAppContact}
+            >
+              <MessageCircle className="mr-2 h-5 w-5" />
+              Chat on WhatsApp
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -305,11 +343,19 @@ const LandingPage = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <Heart className="h-5 w-5 text-primary" />
+              {settings?.logo_url ? (
+                <img src={settings.logo_url} alt="Hospital Logo" className="h-6 w-6 rounded object-contain" />
+              ) : (
+                <Heart className="h-5 w-5 text-primary" />
+              )}
               <span className="font-semibold">{settings?.hospital_name || 'Hospital Management System'}</span>
             </div>
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+              <span>{HOSPITAL_PHONE}</span>
+              <span>{HOSPITAL_EMAIL}</span>
+            </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 All rights reserved. Designed for better healthcare.
+              © 2024 All rights reserved.
             </p>
           </div>
         </div>

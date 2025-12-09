@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,8 +31,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { mockDoctors, mockPatients, mockMedicines } from '@/data/mockData';
 import { Doctor, Patient, Medicine } from '@/types/hospital';
+import { doctorsApi, patientsApi, medicinesApi } from '@/lib/api';
 import {
   Plus,
   Users,
@@ -47,6 +47,7 @@ import {
   Image,
   AlertTriangle,
   RotateCcw,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/currency';
@@ -66,6 +67,9 @@ export default function Admin() {
   const { settings, updateSettings, uploadLogo, isLoading: settingsLoading } = useHospitalSettings();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+  
   // Hospital name state
   const [hospitalName, setHospitalName] = useState('');
   const [isUpdatingName, setIsUpdatingName] = useState(false);
@@ -75,7 +79,7 @@ export default function Admin() {
   const [resetConfirmText, setResetConfirmText] = useState('');
 
   // Doctors state
-  const [doctors, setDoctors] = useState<Doctor[]>(mockDoctors);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
   const [newDoctor, setNewDoctor] = useState({
     name: '',
@@ -85,10 +89,41 @@ export default function Admin() {
   });
 
   // Patients state
-  const [patients, setPatients] = useState<Patient[]>(mockPatients);
+  const [patients, setPatients] = useState<Patient[]>([]);
 
   // Medicines state
-  const [medicines, setMedicines] = useState<Medicine[]>(mockMedicines);
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+
+  // Fetch all data on mount
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    try {
+      const [doctorsRes, patientsRes, medicinesRes] = await Promise.all([
+        doctorsApi.getAll(),
+        patientsApi.getAll(),
+        medicinesApi.getAll(),
+      ]);
+
+      if (doctorsRes.success && doctorsRes.data) {
+        setDoctors(doctorsRes.data);
+      }
+      if (patientsRes.success && patientsRes.data) {
+        setPatients(patientsRes.data);
+      }
+      if (medicinesRes.success && medicinesRes.data) {
+        setMedicines(medicinesRes.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+      toast.error('Failed to load data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Logo upload handler
   const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,24 +171,43 @@ export default function Admin() {
   };
 
   // Reset all data handler
-  const handleResetData = () => {
+  const handleResetData = async () => {
     if (resetConfirmText !== 'RESET') {
       toast.error('Please type RESET to confirm');
       return;
     }
 
-    // Reset all local data
-    setDoctors([]);
-    setPatients([]);
-    setMedicines([]);
+    toast.loading('Resetting all data...');
+    
+    try {
+      // Delete all data from database
+      for (const doctor of doctors) {
+        await doctorsApi.delete(doctor.id);
+      }
+      for (const patient of patients) {
+        await patientsApi.delete(patient.id);
+      }
+      for (const medicine of medicines) {
+        await medicinesApi.delete(medicine.id);
+      }
+      
+      setDoctors([]);
+      setPatients([]);
+      setMedicines([]);
+      
+      toast.dismiss();
+      toast.success('All data has been reset');
+    } catch (error) {
+      toast.dismiss();
+      toast.error('Failed to reset data');
+    }
     
     setIsResetDialogOpen(false);
     setResetConfirmText('');
-    toast.success('All data has been reset');
   };
 
   // Doctor handlers
-  const handleAddDoctor = () => {
+  const handleAddDoctor = async () => {
     if (!newDoctor.name || !newDoctor.specialization) {
       toast.error('Please fill in required fields');
       return;
@@ -164,73 +218,117 @@ export default function Admin() {
       formattedPhone = `+91-${formattedPhone.replace(/^\+?/, '')}`;
     }
 
-    const doctor: Doctor = {
-      id: crypto.randomUUID(),
+    const doctorData = {
       name: newDoctor.name,
       specialization: newDoctor.specialization,
       phone: formattedPhone,
       email: newDoctor.email,
       availability: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-      status: 'Available',
+      status: 'Available' as const,
     };
 
-    setDoctors([...doctors, doctor]);
-    setNewDoctor({ name: '', specialization: '', phone: '', email: '' });
-    setIsAddDoctorOpen(false);
-    toast.success('Doctor added successfully');
+    const result = await doctorsApi.create(doctorData);
+    
+    if (result.success && result.data) {
+      setDoctors([result.data, ...doctors]);
+      setNewDoctor({ name: '', specialization: '', phone: '', email: '' });
+      setIsAddDoctorOpen(false);
+      toast.success('Doctor added successfully');
+    } else {
+      toast.error(result.error || 'Failed to add doctor');
+    }
   };
 
-  const handleDeleteDoctor = (id: string) => {
-    setDoctors(doctors.filter((d) => d.id !== id));
-    toast.success('Doctor removed');
+  const handleDeleteDoctor = async (id: string) => {
+    const result = await doctorsApi.delete(id);
+    if (result.success) {
+      setDoctors(doctors.filter((d) => d.id !== id));
+      toast.success('Doctor removed');
+    } else {
+      toast.error(result.error || 'Failed to delete doctor');
+    }
   };
 
-  const toggleDoctorStatus = (id: string) => {
-    setDoctors(
-      doctors.map((d) =>
-        d.id === id
-          ? { ...d, status: d.status === 'Available' ? 'Off-duty' : 'Available' }
-          : d
-      )
-    );
+  const toggleDoctorStatus = async (id: string) => {
+    const doctor = doctors.find(d => d.id === id);
+    if (!doctor) return;
+
+    const newStatus = doctor.status === 'Available' ? 'Off-duty' : 'Available';
+    const result = await doctorsApi.update(id, { status: newStatus });
+    
+    if (result.success) {
+      setDoctors(doctors.map((d) =>
+        d.id === id ? { ...d, status: newStatus } : d
+      ));
+    } else {
+      toast.error('Failed to update status');
+    }
   };
 
   // Patient handlers
-  const handleDeletePatient = (id: string) => {
-    setPatients(patients.filter((p) => p.id !== id));
-    toast.success('Patient removed');
+  const handleDeletePatient = async (id: string) => {
+    const result = await patientsApi.delete(id);
+    if (result.success) {
+      setPatients(patients.filter((p) => p.id !== id));
+      toast.success('Patient removed');
+    } else {
+      toast.error(result.error || 'Failed to delete patient');
+    }
   };
 
-  const togglePatientStatus = (id: string) => {
-    setPatients(
-      patients.map((p) =>
-        p.id === id
-          ? { ...p, status: p.status === 'Active' ? 'Inactive' : 'Active' }
-          : p
-      )
-    );
+  const togglePatientStatus = async (id: string) => {
+    const patient = patients.find(p => p.id === id);
+    if (!patient) return;
+
+    const newStatus = patient.status === 'Active' ? 'Inactive' : 'Active';
+    const result = await patientsApi.update(id, { status: newStatus });
+    
+    if (result.success) {
+      setPatients(patients.map((p) =>
+        p.id === id ? { ...p, status: newStatus } : p
+      ));
+    } else {
+      toast.error('Failed to update status');
+    }
   };
 
   // Medicine handlers
-  const handleDeleteMedicine = (id: string) => {
-    setMedicines(medicines.filter((m) => m.id !== id));
-    toast.success('Medicine removed');
+  const handleDeleteMedicine = async (id: string) => {
+    const result = await medicinesApi.delete(id);
+    if (result.success) {
+      setMedicines(medicines.filter((m) => m.id !== id));
+      toast.success('Medicine removed');
+    } else {
+      toast.error(result.error || 'Failed to delete medicine');
+    }
   };
 
-  const updateMedicineStock = (id: string, quantity: number) => {
-    setMedicines(
-      medicines.map((m) => {
-        if (m.id === id) {
-          let status: Medicine['status'] = 'In-Stock';
-          if (quantity === 0) status = 'Out-of-Stock';
-          else if (quantity < 100) status = 'Low-Stock';
-          return { ...m, quantity, status };
-        }
-        return m;
-      })
-    );
-    toast.success('Stock updated');
+  const updateMedicineStock = async (id: string, quantity: number) => {
+    let status: Medicine['status'] = 'In-Stock';
+    if (quantity === 0) status = 'Out-of-Stock';
+    else if (quantity < 100) status = 'Low-Stock';
+
+    const result = await medicinesApi.update(id, { quantity, status });
+    
+    if (result.success) {
+      setMedicines(medicines.map((m) =>
+        m.id === id ? { ...m, quantity, status } : m
+      ));
+      toast.success('Stock updated');
+    } else {
+      toast.error('Failed to update stock');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Admin Panel">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Admin Panel">
@@ -258,7 +356,7 @@ export default function Admin() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Settings Tab - Now first */}
+        {/* Settings Tab */}
         <TabsContent value="settings" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             {/* Hospital Branding */}
