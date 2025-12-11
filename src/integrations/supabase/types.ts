@@ -151,6 +151,7 @@ export type Database = {
       doctors: {
         Row: {
           availability: string[] | null
+          consultation_fee: number | null
           created_at: string
           email: string | null
           id: string
@@ -162,6 +163,7 @@ export type Database = {
         }
         Insert: {
           availability?: string[] | null
+          consultation_fee?: number | null
           created_at?: string
           email?: string | null
           id?: string
@@ -173,6 +175,7 @@ export type Database = {
         }
         Update: {
           availability?: string[] | null
+          consultation_fee?: number | null
           created_at?: string
           email?: string | null
           id?: string
@@ -297,6 +300,33 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          message: string
+          read: boolean | null
+          related_id: string | null
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message: string
+          read?: boolean | null
+          related_id?: string | null
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message?: string
+          read?: boolean | null
+          related_id?: string | null
+          type?: string
+        }
+        Relationships: []
+      }
       patients: {
         Row: {
           address: string | null
@@ -342,15 +372,91 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_users: {
+        Row: {
+          created_at: string | null
+          doctor_id: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          password_hash: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string | null
+          user_id: string | null
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          doctor_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          password_hash: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+          user_id?: string | null
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          doctor_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          password_hash?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+          user_id?: string | null
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_users_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role:
+        | "admin"
+        | "doctor"
+        | "lab_staff"
+        | "billing_staff"
+        | "appointment_staff"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -477,6 +583,14 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: [
+        "admin",
+        "doctor",
+        "lab_staff",
+        "billing_staff",
+        "appointment_staff",
+      ],
+    },
   },
 } as const

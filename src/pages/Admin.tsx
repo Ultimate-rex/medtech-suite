@@ -31,8 +31,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Doctor, Patient, Medicine } from '@/types/hospital';
 import { doctorsApi, patientsApi, medicinesApi } from '@/lib/api';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Plus,
   Users,
@@ -48,10 +50,19 @@ import {
   AlertTriangle,
   RotateCcw,
   Loader2,
+  Bell,
+  UserCog,
+  Lock,
+  FlaskConical,
+  CreditCard,
+  CalendarCheck,
+  IndianRupee,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/currency';
 import { useHospitalSettings } from '@/hooks/useHospitalSettings';
+import { useAuth } from '@/contexts/AuthContext';
+import { format } from 'date-fns';
 
 const specializations = [
   'Cardiology',
@@ -63,8 +74,34 @@ const specializations = [
   'General Medicine',
 ];
 
+const staffRoles = [
+  { value: 'doctor', label: 'Doctor', icon: Stethoscope },
+  { value: 'lab_staff', label: 'Lab Staff', icon: FlaskConical },
+  { value: 'billing_staff', label: 'Billing Staff', icon: CreditCard },
+  { value: 'appointment_staff', label: 'Appointment Staff', icon: CalendarCheck },
+];
+
+interface StaffUser {
+  id: string;
+  name: string;
+  role: string;
+  username: string;
+  is_active: boolean;
+  doctor_id: string | null;
+  created_at: string;
+}
+
+interface Notification {
+  id: string;
+  type: string;
+  message: string;
+  read: boolean;
+  created_at: string;
+}
+
 export default function Admin() {
   const { settings, updateSettings, uploadLogo, isLoading: settingsLoading } = useHospitalSettings();
+  const { username } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Loading state
@@ -86,6 +123,7 @@ export default function Admin() {
     specialization: '',
     phone: '',
     email: '',
+    consultationFee: '500',
   });
 
   // Patients state
@@ -94,9 +132,53 @@ export default function Admin() {
   // Medicines state
   const [medicines, setMedicines] = useState<Medicine[]>([]);
 
+  // Staff users state
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
+  const [newStaff, setNewStaff] = useState({
+    name: '',
+    role: '',
+    username: '',
+    password: '',
+    doctor_id: '',
+  });
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Password change state
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
   // Fetch all data on mount
   useEffect(() => {
     fetchAllData();
+    fetchStaffUsers();
+    fetchNotifications();
+
+    // Subscribe to realtime notifications
+    const channel = supabase
+      .channel('notifications-channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        (payload) => {
+          const newNotification = payload.new as Notification;
+          setNotifications(prev => [newNotification, ...prev]);
+          setUnreadCount(prev => prev + 1);
+          toast.info(newNotification.message);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchAllData = async () => {
@@ -122,6 +204,36 @@ export default function Admin() {
       toast.error('Failed to load data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchStaffUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('staff_users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setStaffUsers(data || []);
+    } catch (error) {
+      console.error('Failed to fetch staff users:', error);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setNotifications(data || []);
+      setUnreadCount((data || []).filter(n => !n.read).length);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
     }
   };
 
@@ -180,7 +292,6 @@ export default function Admin() {
     toast.loading('Resetting all data...');
     
     try {
-      // Delete all data from database
       for (const doctor of doctors) {
         await doctorsApi.delete(doctor.id);
       }
@@ -225,17 +336,40 @@ export default function Admin() {
       email: newDoctor.email,
       availability: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
       status: 'Available' as const,
+      consultation_fee: parseFloat(newDoctor.consultationFee) || 500,
     };
 
-    const result = await doctorsApi.create(doctorData);
+    // Use Supabase directly to include consultation_fee
+    const { data, error } = await supabase
+      .from('doctors')
+      .insert({
+        name: doctorData.name,
+        specialization: doctorData.specialization,
+        phone: doctorData.phone,
+        email: doctorData.email,
+        availability: doctorData.availability,
+        status: doctorData.status,
+        consultation_fee: doctorData.consultation_fee,
+      })
+      .select()
+      .single();
     
-    if (result.success && result.data) {
-      setDoctors([result.data, ...doctors]);
-      setNewDoctor({ name: '', specialization: '', phone: '', email: '' });
+    if (!error && data) {
+      const newDoc: Doctor = {
+        id: data.id,
+        name: data.name,
+        specialization: data.specialization,
+        phone: data.phone || '',
+        email: data.email || '',
+        availability: data.availability || [],
+        status: data.status as Doctor['status'],
+      };
+      setDoctors([newDoc, ...doctors]);
+      setNewDoctor({ name: '', specialization: '', phone: '', email: '', consultationFee: '500' });
       setIsAddDoctorOpen(false);
       toast.success('Doctor added successfully');
     } else {
-      toast.error(result.error || 'Failed to add doctor');
+      toast.error(error?.message || 'Failed to add doctor');
     }
   };
 
@@ -320,6 +454,158 @@ export default function Admin() {
     }
   };
 
+  // Staff handlers
+  const handleAddStaff = async () => {
+    if (!newStaff.name || !newStaff.role || !newStaff.username || !newStaff.password) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    if (newStaff.role === 'doctor' && !newStaff.doctor_id) {
+      toast.error('Please select a doctor to link');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('staff_users')
+        .insert({
+          name: newStaff.name,
+          role: newStaff.role as 'admin' | 'doctor' | 'lab_staff' | 'billing_staff' | 'appointment_staff',
+          username: newStaff.username,
+          password_hash: newStaff.password,
+          doctor_id: newStaff.role === 'doctor' ? newStaff.doctor_id : null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setStaffUsers([data, ...staffUsers]);
+      setNewStaff({ name: '', role: '', username: '', password: '', doctor_id: '' });
+      setIsAddStaffOpen(false);
+      toast.success('Staff account created');
+    } catch (error: any) {
+      console.error('Error creating staff:', error);
+      if (error.code === '23505') {
+        toast.error('Username already exists');
+      } else {
+        toast.error('Failed to create staff account');
+      }
+    }
+  };
+
+  const handleDeleteStaff = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('staff_users')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setStaffUsers(staffUsers.filter(s => s.id !== id));
+      toast.success('Staff account deleted');
+    } catch (error) {
+      console.error('Error deleting staff:', error);
+      toast.error('Failed to delete staff account');
+    }
+  };
+
+  const toggleStaffStatus = async (id: string) => {
+    const staff = staffUsers.find(s => s.id === id);
+    if (!staff) return;
+
+    try {
+      const { error } = await supabase
+        .from('staff_users')
+        .update({ is_active: !staff.is_active })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setStaffUsers(staffUsers.map(s =>
+        s.id === id ? { ...s, is_active: !s.is_active } : s
+      ));
+    } catch (error) {
+      console.error('Error updating staff status:', error);
+      toast.error('Failed to update status');
+    }
+  };
+
+  // Mark notifications as read
+  const markNotificationsAsRead = async () => {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('read', false);
+
+      if (error) throw error;
+
+      setNotifications(notifications.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  };
+
+  // Password change handler
+  const handleChangePassword = async () => {
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      toast.error('Please fill all password fields');
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 4) {
+      toast.error('Password must be at least 4 characters');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    
+    try {
+      // Verify current password and update
+      const { data: adminUser, error: fetchError } = await supabase
+        .from('admin_users')
+        .select('*')
+        .eq('username', username)
+        .single();
+
+      if (fetchError || !adminUser) {
+        toast.error('Admin user not found');
+        setIsChangingPassword(false);
+        return;
+      }
+
+      if (adminUser.password_hash !== passwordData.currentPassword) {
+        toast.error('Current password is incorrect');
+        setIsChangingPassword(false);
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('admin_users')
+        .update({ password_hash: passwordData.newPassword })
+        .eq('username', username);
+
+      if (updateError) throw updateError;
+
+      toast.success('Password changed successfully');
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) {
+      console.error('Error changing password:', error);
+      toast.error('Failed to change password');
+    }
+    
+    setIsChangingPassword(false);
+  };
+
   if (isLoading) {
     return (
       <MainLayout title="Admin Panel">
@@ -333,7 +619,7 @@ export default function Admin() {
   return (
     <MainLayout title="Admin Panel">
       <Tabs defaultValue="settings" className="space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-5">
+        <TabsList className="grid w-full max-w-4xl grid-cols-7">
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
             <span className="hidden sm:inline">Settings</span>
@@ -350,9 +636,22 @@ export default function Admin() {
             <Pill className="h-4 w-4" />
             <span className="hidden sm:inline">Pharmacy</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-2">
+          <TabsTrigger value="staff" className="flex items-center gap-2">
+            <UserCog className="h-4 w-4" />
+            <span className="hidden sm:inline">Staff</span>
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex items-center gap-2 relative">
+            <Bell className="h-4 w-4" />
+            <span className="hidden sm:inline">Alerts</span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {unreadCount}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="account" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Security</span>
+            <span className="hidden sm:inline">Account</span>
           </TabsTrigger>
         </TabsList>
 
@@ -371,7 +670,6 @@ export default function Admin() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Logo Preview */}
                 <div className="flex flex-col items-center gap-4 p-6 border-2 border-dashed rounded-lg">
                   {settings?.logo_url ? (
                     <img 
@@ -489,45 +787,6 @@ export default function Admin() {
                 </Dialog>
               </CardContent>
             </Card>
-
-            {/* System Settings */}
-            <Card className="animate-fade-in">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  System Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Auto-confirm appointments</p>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically confirm new appointments
-                    </p>
-                  </div>
-                  <Switch />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Email notifications</p>
-                    <p className="text-sm text-muted-foreground">
-                      Send email reminders to patients
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Low stock alerts</p>
-                    <p className="text-sm text-muted-foreground">
-                      Alert when medicine stock is low
-                    </p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
@@ -581,6 +840,21 @@ export default function Admin() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Consultation Fee (₹) *</Label>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        value={newDoctor.consultationFee}
+                        onChange={(e) =>
+                          setNewDoctor({ ...newDoctor, consultationFee: e.target.value })
+                        }
+                        placeholder="500"
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
                   <div className="grid gap-2">
                     <Label>Phone (+91)</Label>
@@ -840,60 +1114,310 @@ export default function Admin() {
           </Card>
         </TabsContent>
 
-        {/* Security Tab */}
-        <TabsContent value="security" className="space-y-6">
+        {/* Staff Tab */}
+        <TabsContent value="staff" className="space-y-6">
+          <div className="flex justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Staff Management ({staffUsers.length})</h2>
+              <p className="text-sm text-muted-foreground">
+                Create and manage staff accounts for doctors, lab, billing, and appointments
+              </p>
+            </div>
+            <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Staff
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create Staff Account</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label>Full Name *</Label>
+                    <Input
+                      value={newStaff.name}
+                      onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+                      placeholder="Staff name"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Role *</Label>
+                    <Select
+                      value={newStaff.role}
+                      onValueChange={(value) => setNewStaff({ ...newStaff, role: value, doctor_id: '' })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {staffRoles.map((role) => (
+                          <SelectItem key={role.value} value={role.value}>
+                            <div className="flex items-center gap-2">
+                              <role.icon className="h-4 w-4" />
+                              {role.label}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {newStaff.role === 'doctor' && (
+                    <div className="grid gap-2">
+                      <Label>Link to Doctor *</Label>
+                      <Select
+                        value={newStaff.doctor_id}
+                        onValueChange={(value) => setNewStaff({ ...newStaff, doctor_id: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select doctor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {doctors.map((doctor) => (
+                            <SelectItem key={doctor.id} value={doctor.id}>
+                              {doctor.name} - {doctor.specialization}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="grid gap-2">
+                    <Label>Username *</Label>
+                    <Input
+                      value={newStaff.username}
+                      onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
+                      placeholder="Login username"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Password *</Label>
+                    <Input
+                      type="password"
+                      value={newStaff.password}
+                      onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
+                      placeholder="Login password"
+                    />
+                  </div>
+                  <Button onClick={handleAddStaff} className="mt-2">
+                    Create Account
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
           <Card className="animate-fade-in">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Security Settings
-              </CardTitle>
-              <CardDescription>
-                Manage access control and security preferences
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Two-factor authentication</p>
-                  <p className="text-sm text-muted-foreground">
-                    Require 2FA for all admin accounts
-                  </p>
+            <CardContent className="pt-6">
+              {staffUsers.length === 0 ? (
+                <div className="text-center py-12">
+                  <UserCog className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No staff accounts created yet</p>
+                  <Button className="mt-4" onClick={() => setIsAddStaffOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add First Staff
+                  </Button>
                 </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Session timeout</p>
-                  <p className="text-sm text-muted-foreground">
-                    Auto-logout after 30 minutes of inactivity
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Audit logging</p>
-                  <p className="text-sm text-muted-foreground">
-                    Log all user actions for compliance
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">IP whitelisting</p>
-                  <p className="text-sm text-muted-foreground">
-                    Restrict access to specific IP addresses
-                  </p>
-                </div>
-                <Switch />
-              </div>
-              <Button variant="outline" className="w-full mt-4">
-                View Access Logs
-              </Button>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {staffUsers.map((staff) => {
+                      const roleConfig = staffRoles.find(r => r.value === staff.role);
+                      const RoleIcon = roleConfig?.icon || UserCog;
+                      return (
+                        <TableRow key={staff.id}>
+                          <TableCell className="font-medium">{staff.name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <RoleIcon className="h-4 w-4 text-muted-foreground" />
+                              <Badge variant="outline">{roleConfig?.label || staff.role}</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>{staff.username}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={staff.is_active}
+                                onCheckedChange={() => toggleStaffStatus(staff.id)}
+                              />
+                              <Badge variant={staff.is_active ? 'default' : 'secondary'}>
+                                {staff.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(staff.created_at), 'MMM d, yyyy')}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteStaff(staff.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Notifications Tab */}
+        <TabsContent value="notifications" className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold">Notifications</h2>
+              <p className="text-sm text-muted-foreground">
+                Real-time updates from all departments
+              </p>
+            </div>
+            {unreadCount > 0 && (
+              <Button variant="outline" onClick={markNotificationsAsRead}>
+                Mark All as Read
+              </Button>
+            )}
+          </div>
+
+          <Card className="animate-fade-in">
+            <CardContent className="pt-6">
+              {notifications.length === 0 ? (
+                <div className="text-center py-12">
+                  <Bell className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No notifications yet</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[500px]">
+                  <div className="space-y-4">
+                    {notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={`p-4 rounded-lg border ${
+                          notification.read ? 'bg-background' : 'bg-primary/5 border-primary/20'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className={`p-2 rounded-full ${
+                              notification.type === 'appointment' ? 'bg-blue-100 text-blue-600' :
+                              notification.type === 'payment' ? 'bg-green-100 text-green-600' :
+                              notification.type === 'lab_test' ? 'bg-purple-100 text-purple-600' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                              {notification.type === 'appointment' ? <CalendarCheck className="h-4 w-4" /> :
+                               notification.type === 'payment' ? <CreditCard className="h-4 w-4" /> :
+                               notification.type === 'lab_test' ? <FlaskConical className="h-4 w-4" /> :
+                               <Bell className="h-4 w-4" />}
+                            </div>
+                            <div>
+                              <p className={`text-sm ${notification.read ? 'text-muted-foreground' : 'font-medium'}`}>
+                                {notification.message}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {format(new Date(notification.created_at), 'MMM d, yyyy h:mm a')}
+                              </p>
+                            </div>
+                          </div>
+                          {!notification.read && (
+                            <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Account Tab */}
+        <TabsContent value="account" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="animate-fade-in">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Admin Account
+                </CardTitle>
+                <CardDescription>
+                  Logged in as: <span className="font-medium">{username}</span>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    You are the primary admin. Only one admin account (akash/akash) can access this panel.
+                    Staff accounts can be created from the Staff tab.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="animate-fade-in">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  Change Password
+                </CardTitle>
+                <CardDescription>
+                  Update your admin password
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                  <Label>Current Password</Label>
+                  <Input
+                    type="password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                    placeholder="Enter current password"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>New Password</Label>
+                  <Input
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                    placeholder="Enter new password"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Confirm New Password</Label>
+                  <Input
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                    placeholder="Confirm new password"
+                  />
+                </div>
+                <Button 
+                  onClick={handleChangePassword} 
+                  disabled={isChangingPassword}
+                  className="w-full"
+                >
+                  {isChangingPassword ? 'Changing...' : 'Change Password'}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </MainLayout>

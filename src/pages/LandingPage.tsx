@@ -355,7 +355,7 @@ const LandingPage = () => {
               <span>{HOSPITAL_EMAIL}</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 All rights reserved.
+              © {new Date().getFullYear()} {settings?.hospital_name || 'Hospital Management System'}. All rights reserved.
             </p>
           </div>
         </div>

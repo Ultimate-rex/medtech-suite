@@ -17,6 +17,10 @@ import Billing from "./pages/Billing";
 import Labs from "./pages/Labs";
 import Pharmacy from "./pages/Pharmacy";
 import Admin from "./pages/Admin";
+import DoctorPanel from "./pages/DoctorPanel";
+import LabPanel from "./pages/LabPanel";
+import BillingPanel from "./pages/BillingPanel";
+import AppointmentPanel from "./pages/AppointmentPanel";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,7 +41,13 @@ const App = () => (
             {/* Staff/Admin login */}
             <Route path="/login" element={<Login />} />
             
-            {/* Protected staff routes */}
+            {/* Role-based staff panels */}
+            <Route path="/doctor-panel" element={<DoctorPanel />} />
+            <Route path="/lab-panel" element={<LabPanel />} />
+            <Route path="/billing-panel" element={<BillingPanel />} />
+            <Route path="/appointment-panel" element={<AppointmentPanel />} />
+            
+            {/* Protected admin routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/patients" element={<ProtectedRoute><Patients /></ProtectedRoute>} />
             <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
