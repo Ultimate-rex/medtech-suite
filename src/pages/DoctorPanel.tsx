@@ -72,6 +72,30 @@ export default function DoctorPanel() {
     const user = JSON.parse(storedUser) as StaffUser;
     setStaffUser(user);
     fetchDoctorData(user.doctor_id);
+
+    // Set up realtime subscription for appointments
+    if (user.doctor_id) {
+      const channel = supabase
+        .channel('doctor-appointments')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'appointments',
+            filter: `doctor_id=eq.${user.doctor_id}`
+          },
+          () => {
+            // Refetch appointments on any change
+            fetchDoctorData(user.doctor_id);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [navigate]);
 
   const fetchDoctorData = async (doctorId: string | null) => {
