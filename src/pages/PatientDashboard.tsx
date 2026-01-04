@@ -53,6 +53,33 @@ const PatientDashboard = () => {
     fetchDoctors();
   }, []);
 
+  // Realtime subscription for appointments
+  useEffect(() => {
+    if (!user) return;
+    
+    const channel = supabase
+      .channel('patient-appointments')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'appointments'
+        },
+        () => {
+          // Refetch appointments on any change
+          if (user?.id) {
+            fetchMyAppointments(user.id);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -60,25 +87,45 @@ const PatientDashboard = () => {
       return;
     }
     setUser(session.user);
-    fetchMyAppointments(session.user.email || session.user.user_metadata?.full_name || 'Patient');
+    fetchMyAppointments(session.user.id);
     setIsLoading(false);
   };
 
   const fetchDoctors = async () => {
     const response = await doctorsApi.getAll();
     if (response.success && response.data) {
-      setDoctors(response.data);
+      // Only show doctors added by admin (from database)
+      setDoctors(response.data.filter(d => d.status === 'Available'));
     }
   };
 
-  const fetchMyAppointments = async (patientName: string) => {
-    const response = await appointmentsApi.getAll();
-    if (response.success && response.data) {
-      // Filter appointments for current patient
-      const myAppointments = response.data.filter(
-        (apt: Appointment) => apt.patientName.toLowerCase().includes(patientName.toLowerCase().split('@')[0])
-      );
-      setAppointments(myAppointments);
+  const fetchMyAppointments = async (patientId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('patient_id', patientId)
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      
+      const transformedAppointments = (data || []).map((apt: any) => ({
+        id: apt.id,
+        patientId: apt.patient_id,
+        patientName: apt.patient_name,
+        doctorId: apt.doctor_id,
+        doctorName: apt.doctor_name,
+        date: apt.date,
+        time: apt.time,
+        duration: apt.duration,
+        status: apt.status,
+        type: apt.type,
+        notes: apt.notes,
+      }));
+      
+      setAppointments(transformedAppointments);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
     }
   };
 
@@ -100,7 +147,7 @@ const PatientDashboard = () => {
       const patientName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Patient';
 
       const newAppointment = {
-        patientId: user?.id || 'guest',
+        patientId: user?.id,
         patientName: patientName,
         doctorId: selectedDoctor,
         doctorName: doctor?.name || 'Unknown Doctor',
@@ -117,7 +164,7 @@ const PatientDashboard = () => {
         toast.success('Appointment booked successfully!');
         setIsBookingOpen(false);
         resetBookingForm();
-        fetchMyAppointments(patientName);
+        // Appointments will update via realtime subscription
       } else {
         throw new Error(response.error);
       }

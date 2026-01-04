@@ -253,7 +253,9 @@ export const appointmentsApi = {
   create: async (appointment: Omit<Appointment, 'id'>): Promise<ApiResponse<Appointment>> => {
     try {
       const { data, error } = await supabase.from('appointments').insert({
+        patient_id: appointment.patientId,
         patient_name: appointment.patientName,
+        doctor_id: appointment.doctorId,
         doctor_name: appointment.doctorName,
         date: appointment.date,
         time: appointment.time,
@@ -263,6 +265,14 @@ export const appointmentsApi = {
         notes: appointment.notes,
       }).select().single();
       if (error) throw error;
+      
+      // Create notification for new appointment
+      await supabase.from('notifications').insert({
+        type: 'appointment',
+        message: `New appointment booked: ${appointment.patientName} with Dr. ${appointment.doctorName} on ${appointment.date} at ${appointment.time}`,
+        related_id: data.id
+      });
+      
       return { success: true, data: transformAppointment(data) };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
